@@ -6,73 +6,69 @@
 #include <papi.h>
 #include <vector>
 #include <iostream>
+#include <algorithm>
 
 class PapiWrapper
 {
 private:
     int retval;
-    int EventSet = PAPI_NULL;
-    int eventCounter = 0;
+    int eventSet = PAPI_NULL;
     std::vector<long long> values;
-    std::vector<int> indexInResult;
+    std::vector<int> addedEvents;
+    std::vector<int> actualEvents;
     bool running = false;
 
-    void handle_error(int retval, const char *msg)
+    void handle_error(const char *msg, int retval = PAPI_OK)
     {
-        printf("PAPI error %d: There were problems with %s\n", retval, msg);
+        if (retval == PAPI_OK)
+            fprintf(stderr, "PAPI ERROR: %s\n", msg);
+        else
+            fprintf(stderr, "PAPI ERROR (Code %d): %s\n", retval, msg);
+
         exit(1);
     }
 
 public:
-    PapiWrapper() : indexInResult(108, -2) {}
-
-    void Init()
+    template <typename... PapiCodes>
+    void Init(PapiCodes const... eventcodes)
     {
         /* Initialize the PAPI library */
         retval = PAPI_library_init(PAPI_VER_CURRENT);
         if (retval != PAPI_VER_CURRENT)
-        {
-            fprintf(stderr, "PAPI library init error!\n");
-            exit(1);
-        }
+            handle_error("PAPI library init error!\n", retval);
 
         /* Create the Event Set */
-        if (PAPI_create_eventset(&EventSet) != PAPI_OK)
-            handle_error(1, "Could not create event set");
+        retval = PAPI_create_eventset(&eventSet);
+        if (retval != PAPI_OK)
+            handle_error("Could not create event set", retval);
+
+        /* Prepare Events */
+        static_assert(is_all_enum<PapiCodes...>(), "All parameters to Init must be of type enum");
+        int args[]{eventcodes...}; //unpack
+        for (auto eventcode : args)
+            AddEvent(eventcode);
     }
 
-    void AddEvent(int EventCode)
+    void AddEvent(const int eventCode)
     {
-        if (EventCode < 0 || EventCode > 108)
-        {
-            fprintf(stderr, "Unkown EventCode %d\n", EventCode);
-            exit(1);
-        }
-
         if (running)
-        {
-            fprintf(stderr, "You can't add events while Papi is running\n");
-            exit(1);
-        }
+            handle_error("You can't add events while Papi is running\n");
 
-        auto ret = PAPI_add_event(EventSet, EventCode);
+        addedEvents.push_back(eventCode);
+
+        auto ret = PAPI_add_event(eventSet, eventCode);
         if (ret != PAPI_OK)
-        {
-            std::cerr << "failed to add event " << getDescription(EventCode) << ", it returned " << ret << "\n";
-            handle_error(1, getDescription(EventCode));
-        }
+            std::cerr << "WARNING: Failed to add event " << getDescription(eventCode) << ". It returned " << ret << "\n";
         else
-        {
-            indexInResult[EventCode] = eventCounter;
-            eventCounter++;
-        }
+            actualEvents.push_back(eventCode);
     }
 
     void Start()
     {
         /* Start counting */
-        if (PAPI_start(EventSet) != PAPI_OK)
-            handle_error(1, "Could not start PAPI");
+        retval = PAPI_start(eventSet);
+        if (retval != PAPI_OK)
+            handle_error("Could not start PAPI", retval);
 
         running = true;
     }
@@ -80,42 +76,39 @@ public:
     void Stop()
     {
         /*Stop Counting */
-        if (PAPI_stop(EventSet, values.data()) != PAPI_OK)
-            handle_error(1, "Could not stop PAPI");
+        retval = PAPI_stop(eventSet, values.data());
+        if (retval != PAPI_OK)
+            handle_error("Could not stop PAPI", retval);
 
         running = false;
     }
 
-    long GetResult(int EventCode)
+    long GetResult(int eventCode)
     {
         if (running)
-        {
-            fprintf(stderr, "You can't get results while Papi is running\n");
-            exit(1);
-        }
+            handle_error("You can't get results while Papi is running\n");
 
-        if (indexInResult[EventCode] < 0)
-        {
-            fprintf(stderr, "This Event hasn't been added or is not supported\n");
-            exit(1);
-        }
+        auto indexInResult = std::find(actualEvents.begin(), actualEvents.end(), eventCode);
+        if (indexInResult == actualEvents.end())
+            handle_error("The event is not supported or has not been added to the set");
         else
-        {
-            return values[indexInResult[EventCode]];
-        }
+            return values[*indexInResult];
     }
 
     void Print()
     {
-        for (int i = 0; i < 108; i++)
+        auto event = actualEvents.begin();
+        for (auto addedEvent : addedEvents)
         {
-            if (indexInResult[i] == -1)
-                std::cout << getDescription(i) << ": NOT SUPPORTED" << std::endl;
-            else if (indexInResult[i] >= 0)
-                std::cout << getDescription(i) << ": " << GetResult(i) << std::endl;
+            if (event == actualEvents.end() || *event != addedEvent)
+                std::cout << getDescription(addedEvent) << ": NOT SUPPORTED" << std::endl;
+            else
+            {
+                std::cout << getDescription(addedEvent) << ": " << GetResult(addedEvent) << std::endl;
+                event++;
+            }
         }
 
-        std::cout << "For Extracting the results (printed in the same order as has been input to init):" << std::endl;
         std::cout << "@%@ ";
         for (auto val : values)
             std::cout << val << " ";
@@ -123,6 +116,12 @@ public:
     }
 
 private:
+    /* For variadic type check*/
+    template <typename... Ts>
+    struct is_all_enum : std::conjunction<std::is_enum<Ts>...>
+    {
+    };
+
     const char *getDescription(int eventCode)
     {
         switch (eventCode)
