@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.8)
-project(papiobserver LANGUAGES CXX)
+
+project(papiwrapper LANGUAGES CXX)
 
 
 # Compile options
@@ -27,10 +28,20 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Choose the type of build." FORCE)
 endif()
 
+#Modules
+set(CMAKE_MODULE_PATH "${CMAKE_MODULE_PATH};${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+find_package(PAPI REQUIRED)
+
+include_directories(${PAPI_INCLUDE_DIRS})
+
 # Define Variables
 SET(EXECUTABLE_NAME "test/test.cpp")
 
 # Build
 ADD_EXECUTABLE(papitest ${EXECUTABLE_NAME})
+
+# Target libraries
+target_include_directories(papitest INTERFACE include/) 
+target_link_libraries(papitest ${PAPI_LIBRARIES})
 
 
