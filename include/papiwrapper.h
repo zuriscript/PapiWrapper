@@ -85,7 +85,7 @@ public:
         if (indexInResult == events.end())
             handle_error("The event is not supported or has not been added to the set");
 
-        return buffer[*indexInResult];
+        return buffer[indexInResult - events.begin()];
     }
 
     void Print()
