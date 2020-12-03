@@ -109,7 +109,18 @@ public:
             }
         }
 
+        /* Print Headers */
         int count = actualEvents.size();
+        std::cout << "@%% ";
+        for (auto eventCode : actualEvents)
+        {
+            auto description = getDescription(eventCode);
+            for (int j = 0; description[j] != '\0' && description[j] != ' ' && j < 20; j++)
+                std::cout << description[j] << " ";
+        }
+        std::cout << std::endl;
+
+        /* Print results */
         std::cout << "@%@ ";
         for (int i = 0; i < count; i++)
             std::cout << buffer[i] << " ";
