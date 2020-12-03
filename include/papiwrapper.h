@@ -8,12 +8,15 @@
 #include <iostream>
 #include <algorithm>
 
+#define PAPIW_MAX 20
+
 class PapiWrapper
 {
 private:
     int retval;
     int eventSet = PAPI_NULL;
-    long long buffer[20];
+    int maxEventCount = PAPIW_MAX;
+    long long buffer[PAPIW_MAX];
     std::vector<int> addedEvents;
     std::vector<int> actualEvents;
     bool running = false;
@@ -53,6 +56,9 @@ public:
     {
         if (running)
             handle_error("You can't add events while Papi is running\n");
+
+        if (actualEvents.size() + 1 >= PAPIW_MAX)
+            handle_error("Event count limit exceeded. Check PAPIW_MAX\n");
 
         addedEvents.push_back(eventCode);
 
