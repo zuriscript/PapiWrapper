@@ -3,124 +3,59 @@
 
 #include <stdlib.h>
 #include <stdio.h>
-#include <papi.h>
 #include <vector>
 #include <iostream>
 #include <algorithm>
+#include <papi.h>
 
 #define PAPIW_MAX 20
 
 class PapiWrapper
 {
-private:
-    int retval;
-    int eventSet = PAPI_NULL;
-    int maxEventCount = PAPIW_MAX;
-    long long buffer[PAPIW_MAX];
-    std::vector<int> events;
-    bool running = false;
-
 public:
+    virtual ~PapiWrapper() {}
+
+    virtual void AddEvent(const int eventCode) = 0;
+    virtual void Start() = 0;
+    virtual void Stop() = 0;
+    virtual long GetResult(const int eventCode) = 0;
+    virtual void Print() = 0;
+
     template <typename... PapiCodes>
     void Init(PapiCodes const... eventcodes)
     {
         /* Initialize the PAPI library */
         retval = PAPI_library_init(PAPI_VER_CURRENT);
         if (retval != PAPI_VER_CURRENT)
-            handle_error("PAPI library init error!\n", retval);
-
-        /* Create the Event Set */
-        retval = PAPI_create_eventset(&eventSet);
-        if (retval != PAPI_OK)
-            handle_error("Could not create event set", retval);
+            handle_error("Init", "PAPI library init error!\n", retval);
 
         /* Prepare Events */
-        static_assert(std::conjunction<std::is_integral<PapiCodes>...>(), "All parameters to Init must be of integral type");
+        static_assert(std::conjunction<std::is_integral<PapiCodes>...>(),
+                      "All parameters to Init must be of integral type");
         int args[]{eventcodes...}; //unpack
         for (auto eventcode : args)
             AddEvent(eventcode);
     }
 
-    void AddEvent(const int eventCode)
-    {
-        if (running)
-            handle_error("You can't add events while Papi is running\n");
+protected:
+    int retval;
 
-        if (events.size() >= PAPIW_MAX)
-            handle_error("Event count limit exceeded. Check PAPIW_MAX\n");
-
-        auto ret = PAPI_add_event(eventSet, eventCode);
-        if (ret != PAPI_OK)
-            std::cerr << "WARNING: Failed to add event " << getDescription(eventCode) << ". It returned Code " << ret << "\n";
-        else
-            events.push_back(eventCode);
-    }
-
-    void Start()
-    {
-        /* Start counting */
-        retval = PAPI_start(eventSet);
-        if (retval != PAPI_OK)
-            handle_error("Could not start PAPI", retval);
-
-        running = true;
-    }
-
-    void Stop()
-    {
-        /*Stop Counting */
-        retval = PAPI_stop(eventSet, buffer);
-        if (retval != PAPI_OK)
-            handle_error("Could not stop PAPI", retval);
-
-        running = false;
-    }
-
-    long GetResult(int eventCode)
-    {
-        if (running)
-            handle_error("You can't get results while Papi is running\n");
-
-        auto indexInResult = std::find(events.begin(), events.end(), eventCode);
-        if (indexInResult == events.end())
-            handle_error("The event is not supported or has not been added to the set");
-
-        return buffer[indexInResult - events.begin()];
-    }
-
-    void Print()
-    {
-        for (auto eventCode : events)
-            std::cout << getDescription(eventCode) << ": " << GetResult(eventCode) << std::endl;
-
-        /* Print Headers */
-        std::cout << "@%% ";
-        for (auto eventCode : events)
-        {
-            auto description = getDescription(eventCode);
-            for (int j = 0; description[j] != '\0' && description[j] != ' ' && j < 20; j++)
-                std::cout << description[j];
-            std::cout << " ";
-        }
-        std::cout << std::endl;
-
-        /* Print results */
-        int count = events.size();
-        std::cout << "@%@ ";
-        for (int i = 0; i < count; i++)
-            std::cout << buffer[i] << " ";
-        std::cout << std::endl;
-    }
-
-private:
-    void handle_error(const char *msg, int retval = PAPI_OK)
+    void handle_error(const char *location, const char *msg, int retval = PAPI_OK)
     {
         if (retval == PAPI_OK)
-            fprintf(stderr, "PAPI ERROR: %s\n", msg);
+            fprintf(stderr, "PAPI ERROR in %s: %s\n", location, msg);
         else
-            fprintf(stderr, "PAPI ERROR (Code %d): %s\n", retval, msg);
+            fprintf(stderr, "PAPI ERROR (Code %d) in %s: %s\n", retval, location, msg);
 
         exit(1);
+    }
+
+    void issue_waring(const char *location, const char *msg, int retval = PAPI_OK)
+    {
+        if (retval == PAPI_OK)
+            fprintf(stderr, "PAPI WARNING in %s: %s\n", location, msg);
+        else
+            fprintf(stderr, "PAPI WARNING (Code %d) in %s: %s\n", retval, location, msg);
     }
 
     const char *getDescription(int eventCode)
@@ -349,29 +284,145 @@ private:
     }
 };
 
+class PapiWrapperSingle : public PapiWrapper
+{
+private:
+    int eventSet = PAPI_NULL;
+    long long buffer[PAPIW_MAX];
+    std::vector<int> events;
+    bool running = false;
+
+public:
+    ~PapiWrapperSingle() {}
+
+    void AddEvent(const int eventCode) override
+    {
+        if (running)
+            handle_error("AddEvent", "You can't add events while Papi is running\n");
+
+        if (events.size() >= PAPIW_MAX)
+            handle_error("AddEvent", "Event count limit exceeded. Check PAPIW_MAX\n");
+
+        if (eventSet == PAPI_NULL)
+        {
+            /* Create the Event Set */
+            retval = PAPI_create_eventset(&eventSet);
+            if (retval != PAPI_OK)
+                handle_error("AddEvent", "Could not create event set", retval);
+        }
+
+        retval = PAPI_add_event(eventSet, eventCode);
+        if (retval != PAPI_OK)
+            issue_waring("AddEvent. Could not add", getDescription(eventCode), retval);
+        else
+            events.push_back(eventCode);
+    }
+
+    void Start() override
+    {
+        /* Start counting */
+        retval = PAPI_start(eventSet);
+        if (retval != PAPI_OK)
+            handle_error("Start", "Could not start PAPI", retval);
+
+        running = true;
+    }
+
+    void Stop() override
+    {
+        /*Stop Counting */
+        retval = PAPI_stop(eventSet, buffer);
+        if (retval != PAPI_OK)
+            handle_error("Stop", "Could not stop PAPI", retval);
+
+        running = false;
+    }
+
+    long GetResult(int eventCode) override
+    {
+        if (running)
+            handle_error("GetResult", "You can't get results while Papi is running\n");
+
+        auto indexInResult = std::find(events.begin(), events.end(), eventCode);
+        if (indexInResult == events.end())
+            handle_error("GetResult", "The event is not supported or has not been added to the set");
+
+        return buffer[indexInResult - events.begin()];
+    }
+
+    void Print() override
+    {
+        for (auto eventCode : events)
+            std::cout << getDescription(eventCode) << ": " << GetResult(eventCode) << std::endl;
+
+        /* Print Headers */
+        std::cout << "@%% ";
+        for (auto eventCode : events)
+        {
+            auto description = getDescription(eventCode);
+            for (int j = 0; description[j] != '\0' && description[j] != ' ' && j < 20; j++)
+                std::cout << description[j];
+            std::cout << " ";
+        }
+        std::cout << std::endl;
+
+        /* Print results */
+        int count = events.size();
+        std::cout << "@%@ ";
+        for (int i = 0; i < count; i++)
+            std::cout << buffer[i] << " ";
+        std::cout << std::endl;
+    }
+};
+
+class PapiWrapperParallel : public PapiWrapper
+{
+private:
+    std::vector<PapiWrapperSingle> localPapis;
+
+public:
+    void AddEvent(const int eventCode) override
+    {
+        for (auto single : localPapis)
+            single.AddEvent(eventCode);
+    }
+
+    void Start() override
+    {
+    }
+};
+
 namespace PAPIW
 {
-    PapiWrapper papiwrapper;
+    /* Anonymous Namespace to hide PapiWrapper Object */
+    namespace
+    {
+        PapiWrapper *papiwrapper = NULL;
+    }
 
     template <typename... PapiCodes>
     void INIT(PapiCodes const... eventcodes)
     {
-        papiwrapper.Init(eventcodes...);
+        if (papiwrapper)
+            delete papiwrapper;
+
+        papiwrapper = new PapiWrapperSingle{};
+        papiwrapper->Init(eventcodes...);
     }
 
     void START()
     {
-        papiwrapper.Start();
+        papiwrapper->Start();
     }
 
     void STOP()
     {
-        papiwrapper.Stop();
+        papiwrapper->Stop();
     }
 
     void PRINT()
     {
-        papiwrapper.Print();
+        papiwrapper->Print();
     }
 } // namespace PAPIW
 

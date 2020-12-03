@@ -1,5 +1,8 @@
 #include <iostream>
 #include "../include/papiwrapper.h"
+#include <omp.h>
+#include <pthread.h>
+#include <map>
 
 int main()
 {
