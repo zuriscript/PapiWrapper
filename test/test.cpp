@@ -7,4 +7,5 @@ int main()
     PAPIW::START();
     std::cout << "Hello World!" << std::endl;
     PAPIW::STOP();
+    PAPIW::PRINT();
 }
