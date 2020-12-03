@@ -91,8 +91,8 @@ public:
         auto indexInResult = std::find(actualEvents.begin(), actualEvents.end(), eventCode);
         if (indexInResult == actualEvents.end())
             handle_error("The event is not supported or has not been added to the set");
-        else
-            return values[*indexInResult];
+
+        return values[*indexInResult];
     }
 
     void Print()
@@ -347,4 +347,31 @@ private:
         }
     }
 };
+
+namespace PAPIW
+{
+    PapiWrapper papiwrapper;
+
+    template <typename... PapiCodes>
+    void INIT(PapiCodes const... eventcodes)
+    {
+        papiwrapper.Init(eventcodes...);
+    }
+
+    void START()
+    {
+        papiwrapper.Start();
+    }
+
+    void STOP()
+    {
+        papiwrapper.Stop();
+    }
+
+    void PRINT()
+    {
+        papiwrapper.Print();
+    }
+} // namespace PAPIW
+
 #endif

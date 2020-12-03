@@ -3,9 +3,9 @@
 
 int main()
 {
-    PapiWrapper wpapi;
-    wpapi.Init(PAPI_FSQ_INS_idx);
-    wpapi.Start();
+
+    PAPIW::INIT(PAPI_FSQ_INS_idx);
+    PAPIW::START();
     std::cout << "Hello World!" << std::endl;
-    wpapi.Stop();
+    PAPIW::STOP();
 }
