@@ -17,8 +17,7 @@ private:
     int eventSet = PAPI_NULL;
     int maxEventCount = PAPIW_MAX;
     long long buffer[PAPIW_MAX];
-    std::vector<int> addedEvents;
-    std::vector<int> actualEvents;
+    std::vector<int> events;
     bool running = false;
 
 public:
@@ -47,16 +46,14 @@ public:
         if (running)
             handle_error("You can't add events while Papi is running\n");
 
-        if (actualEvents.size() + 1 >= PAPIW_MAX)
+        if (events.size() >= PAPIW_MAX)
             handle_error("Event count limit exceeded. Check PAPIW_MAX\n");
-
-        addedEvents.push_back(eventCode);
 
         auto ret = PAPI_add_event(eventSet, eventCode);
         if (ret != PAPI_OK)
-            std::cerr << "WARNING: Failed to add event " << getDescription(eventCode) << ". It returned " << ret << "\n";
+            std::cerr << "WARNING: Failed to add event " << getDescription(eventCode) << ". It returned Code " << ret << "\n";
         else
-            actualEvents.push_back(eventCode);
+            events.push_back(eventCode);
     }
 
     void Start()
@@ -84,8 +81,8 @@ public:
         if (running)
             handle_error("You can't get results while Papi is running\n");
 
-        auto indexInResult = std::find(actualEvents.begin(), actualEvents.end(), eventCode);
-        if (indexInResult == actualEvents.end())
+        auto indexInResult = std::find(events.begin(), events.end(), eventCode);
+        if (indexInResult == events.end())
             handle_error("The event is not supported or has not been added to the set");
 
         return buffer[*indexInResult];
@@ -93,22 +90,12 @@ public:
 
     void Print()
     {
-        auto event = actualEvents.begin();
-        for (auto addedEvent : addedEvents)
-        {
-            if (event == actualEvents.end() || *event != addedEvent)
-                std::cout << getDescription(addedEvent) << ": NOT SUPPORTED" << std::endl;
-            else
-            {
-                std::cout << getDescription(addedEvent) << ": " << GetResult(addedEvent) << std::endl;
-                event++;
-            }
-        }
+        for (auto eventCode : events)
+            std::cout << getDescription(eventCode) << ": " << GetResult(eventCode) << std::endl;
 
         /* Print Headers */
-        int count = actualEvents.size();
         std::cout << "@%% ";
-        for (auto eventCode : actualEvents)
+        for (auto eventCode : events)
         {
             auto description = getDescription(eventCode);
             for (int j = 0; description[j] != '\0' && description[j] != ' ' && j < 20; j++)
@@ -117,6 +104,7 @@ public:
         std::cout << std::endl;
 
         /* Print results */
+        int count = events.size();
         std::cout << "@%@ ";
         for (int i = 0; i < count; i++)
             std::cout << buffer[i] << " ";
