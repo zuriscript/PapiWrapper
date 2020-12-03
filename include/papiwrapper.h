@@ -99,7 +99,8 @@ public:
         {
             auto description = getDescription(eventCode);
             for (int j = 0; description[j] != '\0' && description[j] != ' ' && j < 20; j++)
-                std::cout << description[j] << " ";
+                std::cout << description[j];
+            std::cout << " ";
         }
         std::cout << std::endl;
 
