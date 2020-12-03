@@ -3,8 +3,7 @@
 
 int main()
 {
-
-    PAPIW::INIT(PAPI_FSQ_INS_idx);
+    PAPIW::INIT(PAPI_L3_TCA);
     PAPIW::START();
     std::cout << "Hello World!" << std::endl;
     PAPIW::STOP();
