@@ -13,7 +13,7 @@ class PapiWrapper
 private:
     int retval;
     int eventSet = PAPI_NULL;
-    std::vector<long long> values;
+    long long buffer[20];
     std::vector<int> addedEvents;
     std::vector<int> actualEvents;
     bool running = false;
@@ -76,7 +76,7 @@ public:
     void Stop()
     {
         /*Stop Counting */
-        retval = PAPI_stop(eventSet, values.data());
+        retval = PAPI_stop(eventSet, buffer);
         if (retval != PAPI_OK)
             handle_error("Could not stop PAPI", retval);
 
@@ -92,7 +92,7 @@ public:
         if (indexInResult == actualEvents.end())
             handle_error("The event is not supported or has not been added to the set");
 
-        return values[*indexInResult];
+        return buffer[*indexInResult];
     }
 
     void Print()
@@ -109,9 +109,10 @@ public:
             }
         }
 
+        int count = actualEvents.size();
         std::cout << "@%@ ";
-        for (auto val : values)
-            std::cout << val << " ";
+        for (int i = 0; i < count; i++)
+            std::cout << buffer[i] << " ";
         std::cout << std::endl;
     }
 
