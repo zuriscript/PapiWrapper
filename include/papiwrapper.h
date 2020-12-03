@@ -21,16 +21,6 @@ private:
     std::vector<int> actualEvents;
     bool running = false;
 
-    void handle_error(const char *msg, int retval = PAPI_OK)
-    {
-        if (retval == PAPI_OK)
-            fprintf(stderr, "PAPI ERROR: %s\n", msg);
-        else
-            fprintf(stderr, "PAPI ERROR (Code %d): %s\n", retval, msg);
-
-        exit(1);
-    }
-
 public:
     template <typename... PapiCodes>
     void Init(PapiCodes const... eventcodes)
@@ -134,6 +124,16 @@ public:
     }
 
 private:
+    void handle_error(const char *msg, int retval = PAPI_OK)
+    {
+        if (retval == PAPI_OK)
+            fprintf(stderr, "PAPI ERROR: %s\n", msg);
+        else
+            fprintf(stderr, "PAPI ERROR (Code %d): %s\n", retval, msg);
+
+        exit(1);
+    }
+
     const char *getDescription(int eventCode)
     {
         switch (eventCode)
