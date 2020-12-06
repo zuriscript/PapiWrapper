@@ -7,6 +7,8 @@
 #include <iostream>
 #include <algorithm>
 #include <papi.h>
+#include <omp.h>
+#include <pthread.h>
 
 #define PAPIW_MAX 20
 
@@ -29,6 +31,9 @@ public:
         if (retval != PAPI_VER_CURRENT)
             handle_error("Init", "PAPI library init error!\n", retval);
 
+        /* Some more initialization in the specialization classes*/
+        localInit();
+
         /* Prepare Events */
         static_assert(std::conjunction<std::is_integral<PapiCodes>...>(),
                       "All parameters to Init must be of integral type");
@@ -40,7 +45,9 @@ public:
 protected:
     int retval;
 
-    void handle_error(const char *location, const char *msg, int retval = PAPI_OK)
+    virtual void localInit() {}
+
+    void handle_error(const char *location, const char *msg, const int retval = PAPI_OK)
     {
         if (retval == PAPI_OK)
             fprintf(stderr, "PAPI ERROR in %s: %s\n", location, msg);
@@ -50,7 +57,7 @@ protected:
         exit(1);
     }
 
-    void issue_waring(const char *location, const char *msg, int retval = PAPI_OK)
+    void issue_waring(const char *location, const char *msg, const int retval = PAPI_OK)
     {
         if (retval == PAPI_OK)
             fprintf(stderr, "PAPI WARNING in %s: %s\n", location, msg);
@@ -58,7 +65,31 @@ protected:
             fprintf(stderr, "PAPI WARNING (Code %d) in %s: %s\n", retval, location, msg);
     }
 
-    const char *getDescription(int eventCode)
+    void print(const std::vector<int> &events, const long long *values)
+    {
+        for (auto eventCode : events)
+            std::cout << getDescription(eventCode) << ": " << GetResult(eventCode) << std::endl;
+
+        /* Print Headers */
+        std::cout << "@%% ";
+        for (auto eventCode : events)
+        {
+            auto description = getDescription(eventCode);
+            for (int j = 0; description[j] != '\0' && description[j] != ' ' && j < 20; j++)
+                std::cout << description[j];
+            std::cout << " ";
+        }
+        std::cout << std::endl;
+
+        /* Print results */
+        int count = events.size();
+        std::cout << "@%@ ";
+        for (int i = 0; i < count; i++)
+            std::cout << values[i] << " ";
+        std::cout << std::endl;
+    }
+
+    const char *getDescription(const int eventCode)
     {
         switch (eventCode)
         {
@@ -288,9 +319,9 @@ class PapiWrapperSingle : public PapiWrapper
 {
 private:
     int eventSet = PAPI_NULL;
+    bool running = false;
     long long buffer[PAPIW_MAX];
     std::vector<int> events;
-    bool running = false;
 
 public:
     ~PapiWrapperSingle() {}
@@ -320,6 +351,10 @@ public:
 
     void Start() override
     {
+        /* State check */
+        if (running)
+            handle_error("Start", "You can not start an already running Papi instance");
+
         /* Start counting */
         retval = PAPI_start(eventSet);
         if (retval != PAPI_OK)
@@ -330,6 +365,10 @@ public:
 
     void Stop() override
     {
+        /* State check */
+        if (!running)
+            handle_error("Stop", "You can not stop an already stopped Papi instance");
+
         /*Stop Counting */
         retval = PAPI_stop(eventSet, buffer);
         if (retval != PAPI_OK)
@@ -338,7 +377,7 @@ public:
         running = false;
     }
 
-    long GetResult(int eventCode) override
+    long GetResult(const int eventCode) override
     {
         if (running)
             handle_error("GetResult", "You can't get results while Papi is running\n");
@@ -350,28 +389,23 @@ public:
         return buffer[indexInResult - events.begin()];
     }
 
+    bool IsRunning()
+    {
+        return running;
+    }
+
+    const long long *GetValues()
+    {
+        return buffer;
+    }
+
     void Print() override
     {
-        for (auto eventCode : events)
-            std::cout << getDescription(eventCode) << ": " << GetResult(eventCode) << std::endl;
+        /* State check */
+        if (running)
+            handle_error("Print", "You can not print while Papi is running. Stop the counters first!");
 
-        /* Print Headers */
-        std::cout << "@%% ";
-        for (auto eventCode : events)
-        {
-            auto description = getDescription(eventCode);
-            for (int j = 0; description[j] != '\0' && description[j] != ' ' && j < 20; j++)
-                std::cout << description[j];
-            std::cout << " ";
-        }
-        std::cout << std::endl;
-
-        /* Print results */
-        int count = events.size();
-        std::cout << "@%@ ";
-        for (int i = 0; i < count; i++)
-            std::cout << buffer[i] << " ";
-        std::cout << std::endl;
+        print(events, buffer);
     }
 };
 
@@ -379,16 +413,102 @@ class PapiWrapperParallel : public PapiWrapper
 {
 private:
     std::vector<PapiWrapperSingle> localPapis;
+    std::vector<int> events;
 
 public:
+    PapiWrapperParallel(const int MaxThreadCount) : localPapis(MaxThreadCount) {}
+    ~PapiWrapperParallel() {}
+
     void AddEvent(const int eventCode) override
     {
         for (auto single : localPapis)
             single.AddEvent(eventCode);
+
+        events.push_back(eventCode);
     }
 
     void Start() override
     {
+#pragma omp parallel
+        {
+
+#pragma omp single
+            checkNumberOfThreads();
+
+#pragma omp for
+            for (auto it = localPapis.begin(); it < localPapis.end(); it++)
+            {
+                it->Start();
+            }
+        }
+    }
+
+    void Stop() override
+    {
+#pragma omp parallel
+        {
+
+#pragma omp single
+            checkNumberOfThreads();
+
+#pragma omp for
+            for (auto it = localPapis.begin(); it < localPapis.end(); it++)
+            {
+                it->Stop();
+            }
+        }
+    }
+
+    long GetResult(const int eventCode) override
+    {
+        long res = 0;
+        for (auto it = localPapis.begin(); it < localPapis.end(); it++)
+        {
+            res += it->GetResult(eventCode);
+        }
+        return res;
+    }
+
+    void Print() override
+    {
+        /* State check */
+        for (auto it = localPapis.begin(); it < localPapis.end(); it++)
+            if (it->IsRunning())
+                handle_error("Print", "You can not print while Papi is running. Stop the counters first!");
+
+        /* Get Values */
+        long long values[PAPIW_MAX];
+        int count = events.size();
+        for (int i = 0; i < count; i++)
+            values[i] = 0;
+        for (auto it = localPapis.begin(); it < localPapis.end(); it++)
+        {
+            auto singleValues = it->GetValues();
+            for (int i = 0; i < count; i++)
+                values[i] += singleValues[i];
+        }
+
+        print(events, values);
+    }
+
+protected:
+    void localInit() override
+    {
+        if (localPapis.size() > 1)
+        {
+            retval = PAPI_thread_init(pthread_self);
+            if (retval != PAPI_OK)
+                handle_error("localInit in PapiWrapperParallel", "Could not initialize OMP Support", retval);
+            else
+                std::cout << "Papi Parallel support enabled" << std::endl;
+        }
+    }
+
+    void checkNumberOfThreads()
+    {
+        /* State check */
+        if (omp_get_num_threads() > (int)localPapis.size())
+            handle_error("Start", "The OMP teamsize is larger than indicated in INIT!");
     }
 };
 
@@ -400,14 +520,23 @@ namespace PAPIW
         PapiWrapper *papiwrapper = NULL;
     }
 
+    template <int MaxThreadCount, typename... PapiCodes>
+    void INIT(PapiCodes const... eventcodes)
+    {
+        delete papiwrapper;
+
+        if constexpr (MaxThreadCount == 1)
+            papiwrapper = static_cast<PapiWrapper *>(new PapiWrapperSingle());
+        else
+            papiwrapper = static_cast<PapiWrapper *>(new PapiWrapperParallel(MaxThreadCount));
+
+        papiwrapper->Init(eventcodes...);
+    }
+
     template <typename... PapiCodes>
     void INIT(PapiCodes const... eventcodes)
     {
-        if (papiwrapper)
-            delete papiwrapper;
-
-        papiwrapper = new PapiWrapperSingle{};
-        papiwrapper->Init(eventcodes...);
+        INIT<1>(eventcodes...);
     }
 
     void START()

@@ -2,7 +2,7 @@
 #include "../include/papiwrapper.h"
 #include <omp.h>
 #include <pthread.h>
-#include <map>
+#include <set>
 
 int main()
 {
