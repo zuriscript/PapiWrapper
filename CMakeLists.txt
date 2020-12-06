@@ -35,13 +35,13 @@ find_package(PAPI REQUIRED)
 include_directories(${PAPI_INCLUDE_DIRS})
 
 # Define Variables
-SET(EXECUTABLE_NAME "test/test.cpp")
+SET(EXECUTABLE_NAME "example/example.cpp")
 
 # Build
-ADD_EXECUTABLE(papitest ${EXECUTABLE_NAME})
+ADD_EXECUTABLE(papi_example ${EXECUTABLE_NAME})
 
 # Target libraries
-target_include_directories(papitest INTERFACE include/) 
-target_link_libraries(papitest ${PAPI_LIBRARIES})
+target_include_directories(papi_example INTERFACE include/) 
+target_link_libraries(papi_example ${PAPI_LIBRARIES})
 
 

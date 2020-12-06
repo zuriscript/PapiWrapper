@@ -22,6 +22,7 @@ public:
     virtual void Stop() = 0;
     virtual long GetResult(const int eventCode) = 0;
     virtual void Print() = 0;
+    virtual void Reset() = 0;
 
     template <typename... PapiCodes>
     void Init(PapiCodes const... eventcodes)
@@ -321,6 +322,7 @@ private:
     int eventSet = PAPI_NULL;
     bool running = false;
     long long buffer[PAPIW_MAX];
+    long long values[PAPIW_MAX];
     std::vector<int> events;
 
 public:
@@ -353,12 +355,12 @@ public:
     {
         /* State check */
         if (running)
-            handle_error("Start", "You can not start an already running Papi instance");
+            handle_error("Start", "You can not start an already running PAPI instance");
 
         /* Start counting */
         retval = PAPI_start(eventSet);
         if (retval != PAPI_OK)
-            handle_error("Start", "Could not start PAPI", retval);
+            handle_error("Start", "Could not start PAPI counters", retval);
 
         running = true;
     }
@@ -372,7 +374,11 @@ public:
         /*Stop Counting */
         retval = PAPI_stop(eventSet, buffer);
         if (retval != PAPI_OK)
-            handle_error("Stop", "Could not stop PAPI", retval);
+            handle_error("Stop", "Could not stop PAPI counters", retval);
+
+        int count = events.size();
+        for (int i = 0; i < count; i++)
+            values[i] += buffer[i];
 
         running = false;
     }
@@ -386,7 +392,15 @@ public:
         if (indexInResult == events.end())
             handle_error("GetResult", "The event is not supported or has not been added to the set");
 
-        return buffer[indexInResult - events.begin()];
+        return values[indexInResult - events.begin()];
+    }
+
+    void Reset()
+    {
+        if (running)
+            Stop();
+
+        localInit();
     }
 
     bool IsRunning()
@@ -396,7 +410,7 @@ public:
 
     const long long *GetValues()
     {
-        return buffer;
+        return values;
     }
 
     void Print() override
@@ -405,7 +419,15 @@ public:
         if (running)
             handle_error("Print", "You can not print while Papi is running. Stop the counters first!");
 
-        print(events, buffer);
+        std::cout << "PAPIW Single PapiWrapper instance report:" << std::endl;
+        print(events, values);
+    }
+
+protected:
+    void localInit() override
+    {
+        for (int i = 0; i < PAPIW_MAX; i++)
+            values[i] = 0;
     }
 };
 
@@ -488,7 +510,14 @@ public:
                 values[i] += singleValues[i];
         }
 
+        std::cout << "PAPIW Parallel PapiWrapper instance with " << localPapis.size() << " threads report:" << std::endl;
         print(events, values);
+    }
+
+    void Reset()
+    {
+        for (auto it = localPapis.begin(); it < localPapis.end(); it++)
+            it->Reset();
     }
 
 protected:
@@ -547,6 +576,11 @@ namespace PAPIW
     void STOP()
     {
         papiwrapper->Stop();
+    }
+
+    void RESET()
+    {
+        papiwrapper->Reset();
     }
 
     void PRINT()
