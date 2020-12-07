@@ -12,9 +12,16 @@ void doFlops();
 void doReads();
 void doMisses();
 
+void testSingle();
+void testParallel();
+
 int main()
 {
-    PAPIW::INIT(PAPI_L3_TCA, PAPI_L3_TCM, PAPI_RES_STL, PAPI_MEM_WCY, PAPI_TOT_CYC);
+}
+
+void testSingle()
+{
+    PAPIW::INIT(PAPI_L2_TCA, PAPI_L2_TCM, PAPI_L3_TCA, PAPI_L3_TCM);
 
     std::cout << "==========================> Do Flops <===========================" << std::endl;
     PAPIW::START();
@@ -24,7 +31,7 @@ int main()
 
     PAPIW::RESET();
 
-    std::cout << "==========================> Do Reads <==========================="<< std::endl;
+    std::cout << "==========================> Do Reads <===========================" << std::endl;
     PAPIW::START();
     doReads();
     PAPIW::STOP();
@@ -32,10 +39,35 @@ int main()
 
     PAPIW::RESET();
 
-    std::cout << "==========================> Do Misses <==========================="<< std::endl;
+    std::cout << "==========================> Do Misses <===========================" << std::endl;
     PAPIW::START();
-    doReads();
+    doMisses();
     PAPIW::STOP();
+    PAPIW::PRINT();
+}
+
+void testParallel()
+{
+    PAPIW::INIT<32>(PAPI_L2_TCA, PAPI_L2_TCM, PAPI_L3_TCA, PAPI_L3_TCM);
+
+    PAPIW::START();
+#pragma omp parallel
+    {
+        doReads();
+    }
+    PAPIW::STOP();
+    std::cout << "==========================> Do Reads <===========================" << std::endl;
+    PAPIW::PRINT();
+
+    PAPIW::RESET();
+
+    PAPIW::START();
+#pragma omp parallel
+    {
+        doMisses();
+    }
+    PAPIW::STOP();
+    std::cout << "==========================> Do Misses <===========================" << std::endl;
     PAPIW::PRINT();
 }
 
