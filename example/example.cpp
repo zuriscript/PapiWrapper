@@ -17,6 +17,10 @@ void testParallel();
 
 int main()
 {
+    std::cout << "==========================> Test Single <===========================" << std::endl;
+    testSingle();
+    std::cout << "==========================> Test Parallel <===========================" << std::endl;
+    testParallel();
 }
 
 void testSingle()
