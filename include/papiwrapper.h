@@ -457,11 +457,7 @@ public:
 #pragma omp single
             checkNumberOfThreads();
 
-#pragma omp for
-            for (auto it = localPapis.begin(); it < localPapis.end(); it++)
-            {
-                it->Start();
-            }
+            localPapis[omp_get_thread_num()].Start();
         }
     }
 
@@ -473,11 +469,7 @@ public:
 #pragma omp single
             checkNumberOfThreads();
 
-#pragma omp for
-            for (auto it = localPapis.begin(); it < localPapis.end(); it++)
-            {
-                it->Stop();
-            }
+            localPapis[omp_get_thread_num()].Stop();
         }
     }
 
