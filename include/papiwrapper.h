@@ -20,7 +20,7 @@ public:
     virtual void AddEvent(const int eventCode) = 0;
     virtual void Start() = 0;
     virtual void Stop() = 0;
-    virtual long GetResult(const int eventCode) = 0;
+    virtual long long GetResult(const int eventCode) = 0;
     virtual void Print() = 0;
     virtual void Reset() = 0;
 
@@ -383,7 +383,7 @@ public:
         running = false;
     }
 
-    long GetResult(const int eventCode) override
+    long long GetResult(const int eventCode) override
     {
         if (running)
             handle_error("GetResult", "You can't get results while Papi is running\n");
@@ -473,14 +473,14 @@ public:
         }
     }
 
-    long GetResult(const int eventCode) override
+    long long GetResult(const int eventCode) override
     {
-        long res = 0;
+        long long acc = 0;
         for (auto it = localPapis.begin(); it < localPapis.end(); it++)
         {
-            res += it->GetResult(eventCode);
+            acc += it->GetResult(eventCode);
         }
-        return res;
+        return acc;
     }
 
     void Print() override
