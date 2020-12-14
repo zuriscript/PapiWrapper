@@ -438,13 +438,16 @@ private:
     std::vector<int> events;
 
 public:
+    PapiWrapperParallel() : localPapis(GetNumThreads()) {}
     PapiWrapperParallel(const int MaxThreadCount) : localPapis(MaxThreadCount) {}
     ~PapiWrapperParallel() {}
 
     void AddEvent(const int eventCode) override
     {
-        for (auto single : localPapis)
-            single.AddEvent(eventCode);
+#pragma omp parallel
+        {
+            localPapis[omp_get_thread_num()].AddEvent(eventCode);
+        }
 
         events.push_back(eventCode);
     }
@@ -476,9 +479,11 @@ public:
     long long GetResult(const int eventCode) override
     {
         long long acc = 0;
-        for (auto it = localPapis.begin(); it < localPapis.end(); it++)
+#pragma omp parallel
         {
-            acc += it->GetResult(eventCode);
+            auto intermediate = localPapis[omp_get_thread_num()].GetResult(eventCode);
+#pragma omp atomic
+            acc += intermediate;
         }
         return acc;
     }
@@ -508,8 +513,21 @@ public:
 
     void Reset()
     {
-        for (auto it = localPapis.begin(); it < localPapis.end(); it++)
-            it->Reset();
+#pragma omp parallel
+        {
+            localPapis[omp_get_thread_num()].Reset();
+        }
+    }
+
+    static int GetNumThreads()
+    {
+        int count;
+#pragma omp parallel
+        {
+#pragma omp master
+            count = omp_get_num_threads();
+        }
+        return count;
     }
 
 protected:
@@ -531,6 +549,211 @@ protected:
         if (omp_get_num_threads() > (int)localPapis.size())
             handle_error("Start", "The OMP teamsize is larger than indicated in INIT!");
     }
+
+    void refresh()
+    {
+#pragma omp parallel
+        {
+            retval = PAPI_unregister_thread();
+            if (retval != PAPI_OK)
+                handle_error("Stop", "Couldn't unregister thread", retval);
+
+            retval = PAPI_register_thread();
+            if (retval != PAPI_OK)
+                handle_error("Stop", "Couldn't unregister thread", retval);
+        }
+    }
+};
+
+class PapiWrapperParallelPessimistic : public PapiWrapper
+{
+private:
+    inline static PapiWrapperSingle *localPapi;
+#pragma omp threadprivate(localPapi)
+    std::vector<int> events;
+    std::vector<long long> values;
+    int numRunningThreads = 0; //0 is none running
+    bool startedFromParallelRegion = false;
+
+public:
+    PapiWrapperParallelPessimistic() {}
+    ~PapiWrapperParallelPessimistic()
+    {
+        std::cout << "Destructing Local Papis" << std::endl;
+        checkNotInParallelRegion("DESTRUCTOR");
+#pragma omp parallel
+        {
+            delete localPapi;
+            localPapi = nullptr;
+        }
+    }
+
+    void AddEvent(const int eventCode) override
+    {
+        checkNotInParallelRegion("ADD_EVENT");
+        checkNoneRunning("ADD_EVENT");
+        events.push_back(eventCode);
+        values.push_back(0);
+    }
+
+    void Start() override
+    {
+        if (isInParallelRegion())
+        {
+            checkNoneRunning("START");
+#pragma omp barrier
+
+            startedFromParallelRegion = true;
+            start();
+        }
+        else
+        {
+            checkNoneRunning("START");
+            startedFromParallelRegion = false;
+#pragma omp parallel
+            {
+                start();
+            }
+        }
+    }
+
+    void Stop() override
+    {
+        checkNumberOfThreads("STOP");
+
+        if (isInParallelRegion())
+        {
+            if (!startedFromParallelRegion)
+                issue_waring("Stop", "The Papi Counters have not been started in a parallel Region. You should not stop them in a parallel region, however, the results should be fine.");
+            stop();
+        }
+        else
+        {
+            if (startedFromParallelRegion)
+                issue_waring("Stop", "The Papi Counters have been started in a parallel Region. You should stop them in the same parallel region or move Start/Stop completely out of the parallel region.");
+#pragma omp parallel
+            {
+                stop();
+            }
+        }
+
+        numRunningThreads = 0;
+    }
+
+    long long GetResult(const int eventCode) override
+    {
+        checkNoneRunning("GET_RESULT");
+
+        auto indexInResult = std::find(events.begin(), events.end(), eventCode);
+        if (indexInResult == events.end())
+            handle_error("GetResult", "The event is not supported or has not been added to the set");
+
+        return values[indexInResult - events.begin()];
+    }
+
+    void Print() override
+    {
+        checkNoneRunning("PRINT");
+        checkNotInParallelRegion("PRINT");
+
+        std::cout << "PAPIW Parallel PapiWrapper instance report:" << std::endl;
+        print(events, values.data());
+    }
+
+    void Reset()
+    {
+        checkNoneRunning("RESET");
+
+        std::fill(values.begin(), values.end(), 0);
+    }
+
+protected:
+    void localInit() override
+    {
+        checkNotInParallelRegion("INIT");
+
+        retval = PAPI_thread_init(pthread_self);
+        if (retval != PAPI_OK)
+            handle_error("localInit in PapiWrapperParallel", "Could not initialize OMP Support", retval);
+        else
+            std::cout << "Papi Parallel support enabled" << std::endl;
+    }
+
+    void start()
+    {
+
+#pragma omp master
+        numRunningThreads = omp_get_num_threads();
+
+        retval = PAPI_register_thread();
+        if (retval != PAPI_OK)
+            handle_error("Start", "Couldn't register thread", retval);
+
+        localPapi = new PapiWrapperSingle{};
+        for (auto eventCode : events)
+            localPapi->AddEvent(eventCode);
+
+        localPapi->Start();
+    }
+
+    void stop()
+    {
+        localPapi->Stop();
+
+        auto eventCount = events.size();
+        for (int i = 0; i < eventCount; i++)
+        {
+#pragma omp atomic
+            values[i] += localPapi->GetResult(events[i]);
+        }
+
+        delete localPapi;
+        localPapi = nullptr;
+
+        retval = PAPI_unregister_thread();
+        if (retval != PAPI_OK)
+            handle_error("Stop", "Couldn't unregister thread", retval);
+    }
+
+    int GetNumThreads()
+    {
+        if (isInParallelRegion())
+            return omp_get_num_threads();
+
+        int count;
+#pragma omp parallel
+        {
+#pragma omp master
+            count = omp_get_num_threads();
+        }
+        return count;
+    }
+
+    bool isInParallelRegion()
+    {
+        return omp_get_level() != 0;
+    }
+
+    void checkNumberOfThreads(const char *actionMsg)
+    {
+        /* State check */
+        if (GetNumThreads() != numRunningThreads)
+            handle_error(actionMsg, "The OMP teamsize is different than indicated in Start!");
+    }
+
+    void checkNotInParallelRegion(const char *actionMsg)
+    {
+        /* State check */
+        if (isInParallelRegion())
+            handle_error(actionMsg, "You may not perform this operation from a parallel region");
+    }
+
+    void checkNoneRunning(const char *actionMsg)
+    {
+        /* State check */
+        if (numRunningThreads)
+            handle_error(actionMsg, "You can not perform this action while Papi is running. Stop the counters first!");
+    }
 };
 
 namespace PAPIW
@@ -538,26 +761,23 @@ namespace PAPIW
     /* Anonymous Namespace to hide PapiWrapper Object */
     namespace
     {
-        PapiWrapper *papiwrapper = NULL;
+        PapiWrapper *papiwrapper = nullptr;
     }
 
-    template <int MaxThreadCount, typename... PapiCodes>
-    void INIT(PapiCodes const... eventcodes)
+    template <typename... PapiCodes>
+    void INIT_SINGLE(PapiCodes const... eventcodes)
     {
         delete papiwrapper;
-
-        if constexpr (MaxThreadCount == 1)
-            papiwrapper = static_cast<PapiWrapper *>(new PapiWrapperSingle());
-        else
-            papiwrapper = static_cast<PapiWrapper *>(new PapiWrapperParallel(MaxThreadCount));
-
+        papiwrapper = static_cast<PapiWrapper *>(new PapiWrapperSingle());
         papiwrapper->Init(eventcodes...);
     }
 
     template <typename... PapiCodes>
-    void INIT(PapiCodes const... eventcodes)
+    void INIT_PARALLEL(PapiCodes const... eventcodes)
     {
-        INIT<1>(eventcodes...);
+        delete papiwrapper;
+        papiwrapper = static_cast<PapiWrapper *>(new PapiWrapperParallelPessimistic());
+        papiwrapper->Init(eventcodes...);
     }
 
     void START()
