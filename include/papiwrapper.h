@@ -10,8 +10,12 @@
 #include <omp.h>
 #include <pthread.h>
 
-#define PAPIW_MAX 20
-
+/**
+ * PapiWrapper abstract class
+ * 
+ * This interface defines the public interface and provides default functionality
+ * and further utility functions
+ */
 class PapiWrapper
 {
 public:
@@ -24,6 +28,12 @@ public:
     virtual void Print() = 0;
     virtual void Reset() = 0;
 
+    /**
+     * Default 
+     *
+     * @tparam PapiCodes a variadic list of PAPI eventcodes
+     * @warning Exits with an error if called in a parallel region
+     */
     template <typename... PapiCodes>
     void Init(PapiCodes const... eventcodes)
     {
@@ -48,6 +58,7 @@ protected:
 
     virtual void localInit() {}
 
+    /* Exit with an error message */
     void handle_error(const char *location, const char *msg, const int retval = PAPI_OK)
     {
         if (retval == PAPI_OK)
@@ -58,6 +69,7 @@ protected:
         exit(1);
     }
 
+    /* Print a warning message */
     void issue_waring(const char *location, const char *msg, const int retval = PAPI_OK)
     {
         if (retval == PAPI_OK)
@@ -66,6 +78,7 @@ protected:
             fprintf(stderr, "PAPI WARNING (Code %d) in %s: %s\n", retval, location, msg);
     }
 
+    /* Print results */
     void print(const std::vector<int> &events, const long long *values)
     {
         for (auto eventCode : events)
@@ -90,6 +103,7 @@ protected:
         std::cout << std::endl;
     }
 
+    /* Get Descriptiion Text of event */
     const char *getDescription(const int eventCode)
     {
         switch (eventCode)
@@ -316,29 +330,36 @@ protected:
     }
 };
 
+/**
+ * PapiWrapper class for Sequential use
+ * 
+ * It is discoureaged to use this class directly but rather through the utility functions
+ * inside the PAPIW namespace.
+ */
 class PapiWrapperSingle : public PapiWrapper
 {
 private:
+    static int const papiMaxAllowedCounters = 20;
     int eventSet = PAPI_NULL;
     bool running = false;
-    long long buffer[PAPIW_MAX];
-    long long values[PAPIW_MAX];
+    long long buffer[papiMaxAllowedCounters];
+    long long values[papiMaxAllowedCounters];
     std::vector<int> events;
 
 public:
     ~PapiWrapperSingle() {}
 
+    /* Add an event to be counted */
     void AddEvent(const int eventCode) override
     {
         if (running)
             handle_error("AddEvent", "You can't add events while Papi is running\n");
 
-        if (events.size() >= PAPIW_MAX)
-            handle_error("AddEvent", "Event count limit exceeded. Check PAPIW_MAX\n");
+        if (events.size() >= papiMaxAllowedCounters)
+            handle_error("AddEvent", "Event count limit exceeded. Check papiMaxAllowedCounters\n");
 
         if (eventSet == PAPI_NULL)
         {
-            /* Create the Event Set */
             retval = PAPI_create_eventset(&eventSet);
             if (retval != PAPI_OK)
                 handle_error("AddEvent", "Could not create event set", retval);
@@ -351,13 +372,12 @@ public:
             events.push_back(eventCode);
     }
 
+    /* Start the counter */
     void Start() override
     {
-        /* State check */
         if (running)
             handle_error("Start", "You can not start an already running PAPI instance");
 
-        /* Start counting */
         retval = PAPI_start(eventSet);
         if (retval != PAPI_OK)
             handle_error("Start", "Could not start PAPI counters", retval);
@@ -365,13 +385,12 @@ public:
         running = true;
     }
 
+    /* Stop the counter */
     void Stop() override
     {
-        /* State check */
         if (!running)
             handle_error("Stop", "You can not stop an already stopped Papi instance");
 
-        /*Stop Counting */
         retval = PAPI_stop(eventSet, buffer);
         if (retval != PAPI_OK)
             handle_error("Stop", "Could not stop PAPI counters", retval);
@@ -383,6 +402,7 @@ public:
         running = false;
     }
 
+    /* Get the result of a specific event */
     long long GetResult(const int eventCode) override
     {
         if (running)
@@ -395,27 +415,30 @@ public:
         return values[indexInResult - events.begin()];
     }
 
+    /* Reset the intermediate counter values */
     void Reset()
     {
         if (running)
-            Stop();
+            handle_error("Reset", "You can't reset while Papi is running\n");
 
         localInit();
     }
 
+    /* Getter Method for running state */
     bool IsRunning()
     {
         return running;
     }
 
+    /* Print the results */
     const long long *GetValues()
     {
         return values;
     }
 
+    /* Print the results */
     void Print() override
     {
-        /* State check */
         if (running)
             handle_error("Print", "You can not print while Papi is running. Stop the counters first!");
 
@@ -424,148 +447,21 @@ public:
     }
 
 protected:
+    /* Initialize the values array */
     void localInit() override
     {
-        for (int i = 0; i < PAPIW_MAX; i++)
+        for (int i = 0; i < papiMaxAllowedCounters; i++)
             values[i] = 0;
     }
 };
 
+/**
+ * PapiWrapper class for Parallel use
+ * 
+ * It is discoureaged to use this class directly but rather through the utility functions
+ * inside the PAPIW namespace.
+ */
 class PapiWrapperParallel : public PapiWrapper
-{
-private:
-    std::vector<PapiWrapperSingle> localPapis;
-    std::vector<int> events;
-
-public:
-    PapiWrapperParallel() : localPapis(GetNumThreads()) {}
-    PapiWrapperParallel(const int MaxThreadCount) : localPapis(MaxThreadCount) {}
-    ~PapiWrapperParallel() {}
-
-    void AddEvent(const int eventCode) override
-    {
-#pragma omp parallel
-        {
-            localPapis[omp_get_thread_num()].AddEvent(eventCode);
-        }
-
-        events.push_back(eventCode);
-    }
-
-    void Start() override
-    {
-#pragma omp parallel
-        {
-
-#pragma omp single
-            checkNumberOfThreads();
-
-            localPapis[omp_get_thread_num()].Start();
-        }
-    }
-
-    void Stop() override
-    {
-#pragma omp parallel
-        {
-
-#pragma omp single
-            checkNumberOfThreads();
-
-            localPapis[omp_get_thread_num()].Stop();
-        }
-    }
-
-    long long GetResult(const int eventCode) override
-    {
-        long long acc = 0;
-#pragma omp parallel
-        {
-            auto intermediate = localPapis[omp_get_thread_num()].GetResult(eventCode);
-#pragma omp atomic
-            acc += intermediate;
-        }
-        return acc;
-    }
-
-    void Print() override
-    {
-        /* State check */
-        for (auto it = localPapis.begin(); it < localPapis.end(); it++)
-            if (it->IsRunning())
-                handle_error("Print", "You can not print while Papi is running. Stop the counters first!");
-
-        /* Get Values */
-        long long values[PAPIW_MAX];
-        int count = events.size();
-        for (int i = 0; i < count; i++)
-            values[i] = 0;
-        for (auto it = localPapis.begin(); it < localPapis.end(); it++)
-        {
-            auto singleValues = it->GetValues();
-            for (int i = 0; i < count; i++)
-                values[i] += singleValues[i];
-        }
-
-        std::cout << "PAPIW Parallel PapiWrapper instance with " << localPapis.size() << " threads report:" << std::endl;
-        print(events, values);
-    }
-
-    void Reset()
-    {
-#pragma omp parallel
-        {
-            localPapis[omp_get_thread_num()].Reset();
-        }
-    }
-
-    static int GetNumThreads()
-    {
-        int count;
-#pragma omp parallel
-        {
-#pragma omp master
-            count = omp_get_num_threads();
-        }
-        return count;
-    }
-
-protected:
-    void localInit() override
-    {
-        if (localPapis.size() > 1)
-        {
-            retval = PAPI_thread_init(pthread_self);
-            if (retval != PAPI_OK)
-                handle_error("localInit in PapiWrapperParallel", "Could not initialize OMP Support", retval);
-            else
-                std::cout << "Papi Parallel support enabled" << std::endl;
-        }
-    }
-
-    void checkNumberOfThreads()
-    {
-        /* State check */
-        if (omp_get_num_threads() > (int)localPapis.size())
-            handle_error("Start", "The OMP teamsize is larger than indicated in INIT!");
-    }
-
-    void refresh()
-    {
-#pragma omp parallel
-        {
-            retval = PAPI_unregister_thread();
-            if (retval != PAPI_OK)
-                handle_error("Stop", "Couldn't unregister thread", retval);
-
-            retval = PAPI_register_thread();
-            if (retval != PAPI_OK)
-                handle_error("Stop", "Couldn't unregister thread", retval);
-        }
-    }
-};
-
-class PapiWrapperParallelPessimistic : public PapiWrapper
 {
 private:
     inline static PapiWrapperSingle *localPapi;
@@ -576,8 +472,8 @@ private:
     bool startedFromParallelRegion = false;
 
 public:
-    PapiWrapperParallelPessimistic() {}
-    ~PapiWrapperParallelPessimistic()
+    PapiWrapperParallel() {}
+    ~PapiWrapperParallel()
     {
         std::cout << "Destructing Local Papis" << std::endl;
         checkNotInParallelRegion("DESTRUCTOR");
@@ -588,6 +484,7 @@ public:
         }
     }
 
+    /* Register events to be counted */
     void AddEvent(const int eventCode) override
     {
         checkNotInParallelRegion("ADD_EVENT");
@@ -596,6 +493,7 @@ public:
         values.push_back(0);
     }
 
+    /* Start the counters */
     void Start() override
     {
         if (isInParallelRegion())
@@ -617,6 +515,7 @@ public:
         }
     }
 
+    /* Stop the counters */
     void Stop() override
     {
         checkNumberOfThreads("STOP");
@@ -640,6 +539,7 @@ public:
         numRunningThreads = 0;
     }
 
+    /* Get the result of a specific event */
     long long GetResult(const int eventCode) override
     {
         checkNoneRunning("GET_RESULT");
@@ -651,23 +551,27 @@ public:
         return values[indexInResult - events.begin()];
     }
 
+    /* Print the values */
     void Print() override
     {
         checkNoneRunning("PRINT");
-        checkNotInParallelRegion("PRINT");
-
-        std::cout << "PAPIW Parallel PapiWrapper instance report:" << std::endl;
-        print(events, values.data());
+#pragma omp single
+        {
+            std::cout << "PAPIW Parallel PapiWrapper instance report:" << std::endl;
+            print(events, values.data());
+        }
     }
 
+    /* Reset the values */
     void Reset()
     {
         checkNoneRunning("RESET");
-
+#pragma omp single
         std::fill(values.begin(), values.end(), 0);
     }
 
 protected:
+    /* Initialize the instance */
     void localInit() override
     {
         checkNotInParallelRegion("INIT");
@@ -679,9 +583,9 @@ protected:
             std::cout << "Papi Parallel support enabled" << std::endl;
     }
 
+    /* Helper function to start the counters */
     void start()
     {
-
 #pragma omp master
         numRunningThreads = omp_get_num_threads();
 
@@ -696,6 +600,7 @@ protected:
         localPapi->Start();
     }
 
+    /* Helper function to stop the counters and accumulate the values to total */
     void stop()
     {
         localPapi->Stop();
@@ -703,8 +608,9 @@ protected:
         auto eventCount = events.size();
         for (int i = 0; i < eventCount; i++)
         {
+            auto localVal = localPapi->GetResult(events[i]);
 #pragma omp atomic
-            values[i] += localPapi->GetResult(events[i]);
+            values[i] += localVal;
         }
 
         delete localPapi;
@@ -715,6 +621,7 @@ protected:
             handle_error("Stop", "Couldn't unregister thread", retval);
     }
 
+    /* Returns the current OMP team size */
     int GetNumThreads()
     {
         if (isInParallelRegion())
@@ -729,11 +636,13 @@ protected:
         return count;
     }
 
+    /* Returns true if it is called in a parallel region or false otherwise */
     bool isInParallelRegion()
     {
         return omp_get_level() != 0;
     }
 
+    /* Check that the current thread team size is not larger then it was last registered or exit with an error otherwise */
     void checkNumberOfThreads(const char *actionMsg)
     {
         /* State check */
@@ -741,21 +650,35 @@ protected:
             handle_error(actionMsg, "The OMP teamsize is different than indicated in Start!");
     }
 
+    /* Check that this method is not called from a parallel context or exit with an error otherwise */
     void checkNotInParallelRegion(const char *actionMsg)
     {
-        /* State check */
         if (isInParallelRegion())
             handle_error(actionMsg, "You may not perform this operation from a parallel region");
     }
 
+    /* Check that no Papi Counter is running or exit with an error otherwise */
     void checkNoneRunning(const char *actionMsg)
     {
-        /* State check */
         if (numRunningThreads)
             handle_error(actionMsg, "You can not perform this action while Papi is running. Stop the counters first!");
     }
 };
 
+/**
+ * Papi Wrapper Highlevel Module
+ * 
+ * This namespace groups all relevant control functions at one place.
+ * It is encouraged to use this utility functions, rather than operating
+ * directly on the PapiWrapper instances.
+ *
+ * Example of use:
+ *     PAPIW::INIT_SINGLE(PAPI_L2_TCA, PAPI_L2_TCM, PAPI_L3_TCA, PAPI_L3_TCM);
+ *     PAPIW::Start();
+ *     doWork();
+ *     PAPIW::Stop();
+ *     PAPIW::Print();
+ */
 namespace PAPIW
 {
     /* Anonymous Namespace to hide PapiWrapper Object */
@@ -764,6 +687,12 @@ namespace PAPIW
         PapiWrapper *papiwrapper = nullptr;
     }
 
+    /**
+     * Initialize Papi wrapper module for sequential use only
+     *
+     * @tparam PapiCodes a variadic list of PAPI eventcodes
+     * @warning Exits with an error if called in a parallel region
+     */
     template <typename... PapiCodes>
     void INIT_SINGLE(PapiCodes const... eventcodes)
     {
@@ -772,29 +701,58 @@ namespace PAPIW
         papiwrapper->Init(eventcodes...);
     }
 
+    /**
+     * Initialize Papi wrapper module for parallel use
+     *
+     * @tparam PapiCodes a variadic list of PAPI eventcodes
+     * @warning Exits with an error if called in a parallel region
+     */
     template <typename... PapiCodes>
     void INIT_PARALLEL(PapiCodes const... eventcodes)
     {
         delete papiwrapper;
-        papiwrapper = static_cast<PapiWrapper *>(new PapiWrapperParallelPessimistic());
+        papiwrapper = static_cast<PapiWrapper *>(new PapiWrapperParallel());
         papiwrapper->Init(eventcodes...);
     }
 
+    /* Start the counters */
     void START()
     {
         papiwrapper->Start();
     }
 
+    /**
+     * Stop the Papi Counters. The current state persists and you may start again to continue counting
+     *
+     * Example of use:
+     *     PAPIW::Start();
+     *     doWork();
+     *     PAPIW::Stop();
+     *     doWorkWhichIsNotMeasured();
+     *     PAPIW::Start();
+     *     doWork();
+     *     PAPIW::Stop();
+     */
     void STOP()
     {
         papiwrapper->Stop();
     }
 
+    /**
+     * Reset the Counters. Use this if you want to start fresh counters after a print
+     *
+     * @warning Exits with an error if the counters are running while calling RESET
+     */
     void RESET()
     {
         papiwrapper->Reset();
     }
 
+    /**
+     * Print the values for all initialized PAPI Events
+     *
+     * @warning Exits with an error if the counters are running while calling RESET
+     */
     void PRINT()
     {
         papiwrapper->Print();
