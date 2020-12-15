@@ -25,7 +25,7 @@ int main()
 
 void testSingle()
 {
-    PAPIW::INIT(PAPI_L2_TCA, PAPI_L2_TCM, PAPI_L3_TCA, PAPI_L3_TCM);
+    PAPIW::INIT_SINGLE(PAPI_L2_TCA, PAPI_L2_TCM, PAPI_L3_TCA, PAPI_L3_TCM);
 
     std::cout << "==========================> Do Flops <===========================" << std::endl;
     PAPIW::START();
@@ -52,7 +52,7 @@ void testSingle()
 
 void testParallel()
 {
-    PAPIW::INIT<32>(PAPI_L2_TCA, PAPI_L2_TCM, PAPI_L3_TCA, PAPI_L3_TCM);
+    PAPIW::INIT_PARALLEL(PAPI_L2_TCA, PAPI_L2_TCM, PAPI_L3_TCA, PAPI_L3_TCM);
 
     PAPIW::START();
 #pragma omp parallel
