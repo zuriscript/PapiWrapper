@@ -1,5 +1,6 @@
-#include <iostream>
 #include "../include/papiwrapper.h"
+
+#include <iostream>
 #include <omp.h>
 #include <pthread.h>
 #include <set>
@@ -13,13 +14,14 @@ void doReads();
 void doMisses();
 
 void testSingle();
-void testParallel();
+void testParallelSimple();
+void testParallelExhaustive();
 
 int main()
 {
-    std::cout << "==========================> Test Single <===========================" << std::endl;
+    std::cout << "==========================> Example Single <===========================" << std::endl;
     testSingle();
-    std::cout << "==========================> Test Parallel <===========================" << std::endl;
+    std::cout << "==========================> Example Parallel <===========================" << std::endl;
     testParallel();
 }
 
@@ -54,17 +56,20 @@ void testParallel()
 {
     PAPIW::INIT_PARALLEL(PAPI_L2_TCA, PAPI_L2_TCM, PAPI_L3_TCA, PAPI_L3_TCM);
 
-    PAPIW::START();
+/* Where possible, the counter should be started inside the parallel region and stopped at the end*/
 #pragma omp parallel
     {
+        PAPIW::START();
         doReads();
+        PAPIW::STOP();
     }
-    PAPIW::STOP();
+
     std::cout << "==========================> Do Reads <===========================" << std::endl;
     PAPIW::PRINT();
 
     PAPIW::RESET();
 
+    /* But this is also possible*/
     PAPIW::START();
 #pragma omp parallel
     {

@@ -16,9 +16,6 @@ else()
     message("-- Configuring release build")
 endif()
 
-# set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -g -O0 -DMINEBENCH_TEST")
-# set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3")
-
 # Collect outputs in a single bin directory.
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
@@ -30,7 +27,7 @@ endif()
 
 #Modules
 set(CMAKE_MODULE_PATH "${CMAKE_MODULE_PATH};${CMAKE_CURRENT_SOURCE_DIR}/cmake")
-find_package(PAPI REQUIRED)
+find_package(PAPI)
 
 include_directories(${PAPI_INCLUDE_DIRS})
 
