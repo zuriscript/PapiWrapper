@@ -27,7 +27,7 @@ int main()
 
 void testSingle()
 {
-    PAPIW::INIT_SINGLE(PAPI_L2_TCA, PAPI_L2_TCM, PAPI_L3_TCA, PAPI_L3_TCM);
+    PAPIW::INIT_SINGLE(PAPI_L2_TCA, PAPI_L1_TCM, PAPI_L3_TCA, PAPI_L3_TCM);
 
     std::cout << "==========================> Do Flops <===========================" << std::endl;
     PAPIW::START();
@@ -54,7 +54,7 @@ void testSingle()
 
 void testParallel()
 {
-    PAPIW::INIT_PARALLEL(PAPI_L2_TCA, PAPI_L2_TCM, PAPI_L3_TCA, PAPI_L3_TCM);
+    PAPIW::INIT_PARALLEL(PAPI_L2_TCA, PAPI_L1_TCM, PAPI_L3_TCA, PAPI_L3_TCM);
 
 /* Where possible, the counter should be started inside the parallel region and stopped at the end*/
 #pragma omp parallel
