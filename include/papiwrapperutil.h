@@ -500,8 +500,9 @@ public:
     {
         if (isInParallelRegion())
         {
+
+#pragma omp single
             checkNoneRunning("START");
-#pragma omp barrier
 
             startedFromParallelRegion = true;
             start();
@@ -527,6 +528,10 @@ public:
             if (!startedFromParallelRegion)
                 issue_waring("Stop", "The Papi Counters have not been started in a parallel Region. You should not stop them in a parallel region, however, the results should be fine.");
             stop();
+
+#pragma omp barrier
+
+            numRunningThreads = 0;
         }
         else
         {
@@ -536,9 +541,8 @@ public:
             {
                 stop();
             }
+            numRunningThreads = 0;
         }
-
-        numRunningThreads = 0;
     }
 
     /* Get the result of a specific event */
@@ -588,7 +592,7 @@ protected:
     /* Helper function to start the counters */
     void start()
     {
-#pragma omp master
+#pragma omp single
         numRunningThreads = omp_get_num_threads();
 
         retval = PAPI_register_thread();
