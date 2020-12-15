@@ -9,6 +9,9 @@
  * This namespace groups all relevant control functions at one place.
  * It is encouraged to use this utility functions, rather than operating
  * directly on the PapiWrapper instances.
+ * 
+ * @note If NOPAPIW is defined, all calls to PAPIW become No-Ops
+ * @note If Openmp is missing, then all parallel counters are turned into sequential ones
  *
  * Example of use:
  *     PAPIW::INIT_SINGLE(PAPI_L2_TCA, PAPI_L2_TCM, PAPI_L3_TCA, PAPI_L3_TCM);
@@ -22,7 +25,7 @@ namespace PAPIW
     /* Anonymous Namespace to hide PapiWrapper Object */
     namespace
     {
-#ifdef _PAPIW
+#if !defined(NOPAPIW)
         PapiWrapper *papiwrapper = nullptr;
 #endif
     } // namespace
@@ -36,7 +39,7 @@ namespace PAPIW
     template <typename... PapiCodes>
     void INIT_SINGLE(PapiCodes const... eventcodes)
     {
-#ifdef _PAPIW
+#if !defined(NOPAPIW)
         delete papiwrapper;
         papiwrapper = static_cast<PapiWrapper *>(new PapiWrapperSingle());
         papiwrapper->Init(eventcodes...);
@@ -52,7 +55,9 @@ namespace PAPIW
     template <typename... PapiCodes>
     void INIT_PARALLEL(PapiCodes const... eventcodes)
     {
-#ifdef _PAPIW
+#if !defined(_OPENMP)
+        INIT_SINGLE(eventcodes...);
+#elif !defined(NOPAPIW)
         delete papiwrapper;
         papiwrapper = static_cast<PapiWrapper *>(new PapiWrapperParallel());
         papiwrapper->Init(eventcodes...);
@@ -62,7 +67,7 @@ namespace PAPIW
     /* Start the counters */
     void START()
     {
-#ifdef _PAPIW
+#if !defined(NOPAPIW)
         papiwrapper->Start();
 #endif
     }
@@ -81,7 +86,7 @@ namespace PAPIW
      */
     void STOP()
     {
-#ifdef _PAPIW
+#if !defined(NOPAPIW)
         papiwrapper->Stop();
 #endif
     }
@@ -93,7 +98,7 @@ namespace PAPIW
      */
     void RESET()
     {
-#ifdef _PAPIW
+#if !defined(NOPAPIW)
         papiwrapper->Reset();
 #endif
     }
@@ -105,14 +110,14 @@ namespace PAPIW
      */
     void PRINT()
     {
-#ifdef _PAPIW
+#if !defined(NOPAPIW)
         papiwrapper->Print();
 #endif
     }
 } // namespace PAPIW
 
-#ifndef _PAPIW
-/* Provide PAPI Counter Macros, s.t. a program using PAPIW compiles*/
+#ifdef NOPAPIW
+/* Provide PAPI Counter Macros, s.t. a program with deactivated PAPIW compiles nevertheless */
 #define PAPI_L1_DCM 0
 #define PAPI_L1_ICM 0
 #define PAPI_L2_DCM 0
