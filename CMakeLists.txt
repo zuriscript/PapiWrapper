@@ -38,12 +38,12 @@ endif(PAPI_FOUND)
 SET(EXECUTABLE_NAME "example/example.cpp")
 
 # Build
-ADD_EXECUTABLE(papi_example ${EXECUTABLE_NAME})
+ADD_EXECUTABLE(papiw_example ${EXECUTABLE_NAME})
 
 # Target libraries
-target_include_directories(papi_example INTERFACE include/) 
+target_include_directories(papiw_example INTERFACE include/) 
 if(PAPI_FOUND)
-        target_link_libraries(papi_example ${PAPI_LIBRARIES})
+        target_link_libraries(papiw_example ${PAPI_LIBRARIES})
 endif(PAPI_FOUND)
 
 
