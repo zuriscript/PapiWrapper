@@ -27,6 +27,13 @@ namespace PAPIW
     {
 #if !defined(NOPAPIW)
         PapiWrapper *papiwrapper = nullptr;
+#else
+        /* Helper Function to ignore unused warning parameter warning if PAPIW is not used */
+        struct sink
+        {
+            template <typename... Args>
+            sink(Args const &...) {}
+        };
 #endif
     } // namespace
 
@@ -43,6 +50,8 @@ namespace PAPIW
         delete papiwrapper;
         papiwrapper = static_cast<PapiWrapper *>(new PapiWrapperSingle());
         papiwrapper->Init(eventcodes...);
+#else
+        sink{eventcodes...};
 #endif
     }
 
@@ -61,6 +70,8 @@ namespace PAPIW
         delete papiwrapper;
         papiwrapper = static_cast<PapiWrapper *>(new PapiWrapperParallel());
         papiwrapper->Init(eventcodes...);
+#else
+        sink{eventcodes...};
 #endif
     }
 
