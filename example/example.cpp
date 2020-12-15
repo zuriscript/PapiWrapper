@@ -14,7 +14,7 @@ void doReads();
 void doMisses();
 
 void testSingle();
-void testParallelSimple();
+void testParallel();
 void testParallelExhaustive();
 
 int main()
