@@ -29,8 +29,11 @@ endif()
 set(CMAKE_MODULE_PATH "${CMAKE_MODULE_PATH};${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 find_package(PAPI)
 
-include_directories(${PAPI_INCLUDE_DIRS})
-
+if(PAPI_FOUND)
+    include_directories(${PAPI_INCLUDE_DIRS})
+else()
+    add_compile_definitions(NOPAPIW)
+endif(PAPI_FOUND)
 # Define Variables
 SET(EXECUTABLE_NAME "example/example.cpp")
 
@@ -39,6 +42,9 @@ ADD_EXECUTABLE(papi_example ${EXECUTABLE_NAME})
 
 # Target libraries
 target_include_directories(papi_example INTERFACE include/) 
-target_link_libraries(papi_example ${PAPI_LIBRARIES})
+if(PAPI_FOUND)
+        target_link_libraries(papi_example ${PAPI_LIBRARIES})
+endif(PAPI_FOUND)
+
 
 
