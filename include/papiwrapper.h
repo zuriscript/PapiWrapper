@@ -22,68 +22,68 @@
  */
 namespace PAPIW
 {
-    /* Anonymous Namespace to hide PapiWrapper Object */
-    namespace
-    {
-#if !defined(NOPAPIW)
-        PapiWrapper *papiwrapper = nullptr;
-#else
-        /* Helper Function to ignore unused warning parameter warning if PAPIW is not used */
-        struct sink
+        /* Anonymous Namespace to hide PapiWrapper Object */
+        namespace
         {
-            template <typename... Args>
-            sink(Args const &...) {}
-        };
+#if !defined(NOPAPIW)
+                PapiWrapper *papiwrapper = nullptr;
+#else
+                /* Helper Function to ignore unused warning parameter warning if PAPIW is not used */
+                struct sink
+                {
+                        template <typename... Args>
+                        sink(Args const &...) {}
+                };
 #endif
-    } // namespace
+        } // namespace
 
-    /**
+        /**
      * Initialize Papi wrapper module for sequential use only
      *
      * @tparam PapiCodes a variadic list of PAPI eventcodes
      * @warning Exits with an error if called in a parallel region
      */
-    template <typename... PapiCodes>
-    void INIT_SINGLE(PapiCodes const... eventcodes)
-    {
+        template <typename... PapiCodes>
+        void INIT_SINGLE(PapiCodes const... eventcodes)
+        {
 #if !defined(NOPAPIW)
-        delete papiwrapper;
-        papiwrapper = static_cast<PapiWrapper *>(new PapiWrapperSingle());
-        papiwrapper->Init(eventcodes...);
+                delete papiwrapper;
+                papiwrapper = static_cast<PapiWrapper *>(new PapiWrapperSingle());
+                papiwrapper->Init(eventcodes...);
 #else
-        sink{eventcodes...};
+                sink{eventcodes...};
 #endif
-    }
+        }
 
-    /**
+        /**
      * Initialize Papi wrapper module for parallel use
      *
      * @tparam PapiCodes a variadic list of PAPI eventcodes
      * @warning Exits with an error if called in a parallel region
      */
-    template <typename... PapiCodes>
-    void INIT_PARALLEL(PapiCodes const... eventcodes)
-    {
+        template <typename... PapiCodes>
+        void INIT_PARALLEL(PapiCodes const... eventcodes)
+        {
 #if !defined(_OPENMP)
-        INIT_SINGLE(eventcodes...);
+                INIT_SINGLE(eventcodes...);
 #elif !defined(NOPAPIW)
-        delete papiwrapper;
-        papiwrapper = static_cast<PapiWrapper *>(new PapiWrapperParallel());
-        papiwrapper->Init(eventcodes...);
+                delete papiwrapper;
+                papiwrapper = static_cast<PapiWrapper *>(new PapiWrapperParallel());
+                papiwrapper->Init(eventcodes...);
 #else
-        sink{eventcodes...};
+                sink{eventcodes...};
 #endif
-    }
+        }
 
-    /* Start the counters */
-    void START()
-    {
+        /* Start the counters */
+        void START()
+        {
 #if !defined(NOPAPIW)
-        papiwrapper->Start();
+                papiwrapper->Start();
 #endif
-    }
+        }
 
-    /**
+        /**
      * Stop the Papi Counters. The current state persists and you may start again to continue counting
      *
      * Example of use:
@@ -95,36 +95,36 @@ namespace PAPIW
      *     doWork();
      *     PAPIW::Stop();
      */
-    void STOP()
-    {
+        void STOP()
+        {
 #if !defined(NOPAPIW)
-        papiwrapper->Stop();
+                papiwrapper->Stop();
 #endif
-    }
+        }
 
-    /**
+        /**
      * Reset the Counters. Use this if you want to start fresh counters after a print
      *
      * @warning Exits with an error if the counters are running while calling RESET
      */
-    void RESET()
-    {
+        void RESET()
+        {
 #if !defined(NOPAPIW)
-        papiwrapper->Reset();
+                papiwrapper->Reset();
 #endif
-    }
+        }
 
-    /**
+        /**
      * Print the values for all initialized PAPI Events
      *
-     * @warning Exits with an error if the counters are running while calling RESET
+     * @warning Exits with an error if the counters are running while calling PRINT
      */
-    void PRINT()
-    {
+        void PRINT()
+        {
 #if !defined(NOPAPIW)
-        papiwrapper->Print();
+                papiwrapper->Print();
 #endif
-    }
+        }
 } // namespace PAPIW
 
 #ifdef NOPAPIW
