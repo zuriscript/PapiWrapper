@@ -21,7 +21,7 @@ $ bin/papiw_example
 
 ### Include
 
-To add the Papi Library, copy `cmake/FindPAPI.cmake` and the folder `include/` to your project.  
+To add the Papi Library as well `PAPIW`, copy `cmake/FindPAPI.cmake` and the folder `include/` to your project.  
 Recommended Cmake setup:
 
 ```cmake
@@ -50,9 +50,9 @@ Initialization (Allows variadic Papi eventcode arguments):
 
 ```c++
     // Use either
-    PAPIW::INIT_SINGLE(PAPI_L2_TCA, PAPI_L1_TCM, PAPI_L3_TCA, PAPI_L3_TCM); // Init PAPIW for sequential use
+    PAPIW::INIT_SINGLE(PAPI_L2_TCA, PAPI_L1_TCM, PAPI_L3_TCA, PAPI_L3_TCM); // Init PAPIW for sequential use only
     // Or
-    PAPIW::INIT_PARALLEL(PAPI_L2_TCA, PAPI_L1_TCM, PAPI_L3_TCA, PAPI_L3_TCM); // Init PAPIW for sequential use
+    PAPIW::INIT_PARALLEL(PAPI_L2_TCA, PAPI_L1_TCM, PAPI_L3_TCA, PAPI_L3_TCM); // Init PAPIW for parallel use
 ```
 
 Benchmarking:
