@@ -30,10 +30,13 @@ set(CMAKE_MODULE_PATH "${CMAKE_MODULE_PATH};${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 find_package(PAPI)
 
 if(PAPI_FOUND)
+    message (STATUS "Including Papi Directories")
     include_directories(${PAPI_INCLUDE_DIRS})
 else()
+    message (STATUS "Defining NOPAPIW in order to disable PAPIW functions" )
     add_compile_definitions(NOPAPIW)
 endif(PAPI_FOUND)
+
 # Define Variables
 SET(EXECUTABLE_NAME "example/example.cpp")
 
@@ -43,7 +46,8 @@ ADD_EXECUTABLE(papiw_example ${EXECUTABLE_NAME})
 # Target libraries
 target_include_directories(papiw_example INTERFACE include/) 
 if(PAPI_FOUND)
-        target_link_libraries(papiw_example ${PAPI_LIBRARIES})
+    message (STATUS "Linking to Papi Libraries")
+    target_link_libraries(papiw_example ${PAPI_LIBRARIES})
 endif(PAPI_FOUND)
 
 
