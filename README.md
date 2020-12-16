@@ -2,7 +2,7 @@
 
 This repository contains the code for a Papi wrapper which simplifies the use of Papi, especially when using Openmp.  
 It comes as a Header-only library, which only requires `papiwrapper.h` to be included.  
-This will inject the namespace `PAPIW` which provides a slim and functional API without the need to take care of any objects.
+This will inject the namespace `PAPIW` which provides a slim and functional API without the need for the client to take care of any states or objects.
 
 ### Setup Example
 
