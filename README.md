@@ -21,7 +21,7 @@ $ bin/papiw_example
 
 ### Include
 
-To add the Papi Library as well `PAPIW`, copy `cmake/FindPAPI.cmake` and the folder `include/` to your project.  
+To add the Papi Library as well as `PAPIW`, copy `cmake/FindPAPI.cmake` and the folder `include/` to your project.  
 Recommended Cmake setup:
 
 ```cmake
