@@ -348,7 +348,11 @@ private:
     std::vector<int> events;
 
 public:
+    PapiWrapperSingle() : ThreadID(0) {}
+    PapiWrapperSingle(const unsigned long threadID) : ThreadID(threadID) {}
     ~PapiWrapperSingle() {}
+
+    const unsigned long ThreadID;
 
     /* Add an event to be counted */
     void AddEvent(const int eventCode) override
@@ -599,7 +603,7 @@ protected:
         if (retval != PAPI_OK)
             handle_error("Start", "Couldn't register thread", retval);
 
-        localPapi = new PapiWrapperSingle{};
+        localPapi = new PapiWrapperSingle(pthread_self());
         for (auto eventCode : events)
             localPapi->AddEvent(eventCode);
 
@@ -610,6 +614,10 @@ protected:
     void stop()
     {
         localPapi->Stop();
+
+        /*Check that same thread is used since starting the counters*/
+        if (PAPI_thread_id() != localPapi->ThreadID)
+            handle_error("Stop", "Invalid State: The Thread Ids differs from initialization!\nApparently, new threads were use without reassigning the Papi counters. Please Start and Stop more often to avoid this error.");
 
         int eventCount = events.size();
         for (int i = 0; i < eventCount; i++)
