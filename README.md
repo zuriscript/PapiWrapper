@@ -46,13 +46,13 @@ endif(PAPI_FOUND)
 
 ### Usage
 
-Initialization (Allows variadic Papi eventcode arguments):
+Initialization (Supports variadic Papi eventcode arguments):
 
 ```c++
     // Use either
-    PAPIW::INIT_SINGLE(PAPI_L2_TCA, PAPI_L1_TCM, PAPI_L3_TCA, PAPI_L3_TCM); // Init PAPIW for sequential use only
+    PAPIW::INIT_SINGLE(PAPI_L2_TCA, PAPI_L3_TCA); // Init PAPIW for sequential use only
     // Or
-    PAPIW::INIT_PARALLEL(PAPI_L2_TCA, PAPI_L1_TCM, PAPI_L3_TCA, PAPI_L3_TCM); // Init PAPIW for parallel use
+    PAPIW::INIT_PARALLEL(PAPI_L2_TCA, PAPI_L3_TCA); // Init PAPIW for parallel use
 ```
 
 Benchmarking:
